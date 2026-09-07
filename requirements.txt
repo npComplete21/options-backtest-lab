@@ -1,0 +1,5 @@
+pyspark==3.5.*
+yfinance
+pandas
+numpy
+boto3
