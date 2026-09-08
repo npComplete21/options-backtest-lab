@@ -373,35 +373,33 @@ was wrong and it is much cheaper to find that out at Phase 6 than Phase 7.
 
 ---
 
-## 11. Open decisions
+## 11. Decisions
 
-**Framework (new — these drive the redesign):**
+**Resolved 2026-09-08:**
 
-1. **Strategy DSL in YAML + Python escape hatch** (recommended), or
-   Python-only strategy classes? YAML makes sweeps and diffs trivial; classes
-   are simpler but push every new strategy through code review.
-2. **First strategies to implement** — short strangle + iron condor covers
-   undefined-risk and defined-risk. Add a calendar to prove the
-   two-expiry path early, or defer?
-3. **First instruments** — one ETF (QQQ, high-confidence vol model) plus one
-   single stock (AAPL, `directional_only`) to force genericity from the
-   start? Recommended: doing both early prevents ETF assumptions leaking in.
-4. **Single-stock accuracy** (§3) — accept `directional_only` labelling, or
-   restrict v1 to ETFs until real chain data is available?
-5. **Alpha Vantage premium** — worth subscribing? It would remove the
-   assumed-IV problem for single stocks and let us calibrate rather than
-   sweep the skew. Changes §3 and §5 substantially.
+| # | Decision | Choice |
+|---|---|---|
+| 1 | Strategy definition | **YAML specs + Python ABC escape hatch**, compiling to one engine path |
+| 2 | Single-stock accuracy | **Ship with `directional_only` tag** — assumed IV premium, labelled honestly |
+| 3 | First targets | **short strangle + iron condor**, on **QQQ + AAPL** — both axes exercised early |
+| 4 | Calendar spread | **Deferred** — two-expiry selector path built but not yet exercised by a strategy |
+| 5 | Alpha Vantage premium | **No** — proceed synthetic, re-raise before Phase 4 |
 
-**Carried over from v1:**
+Choice 3 matters most: one high-confidence ETF plus one `directional_only`
+single stock from the start, so ETF-shaped assumptions cannot harden in the
+engine before Phase 6 tests for them.
 
-6. **European approximation** — accept for OTM ETF strategies (recommended),
-   noting §3 makes this weaker for single stocks?
-7. **Fill model** — vega-based vol-point spread (§8), or your own assumption?
+**Still open — gate Phase 5, not Phases 0–4:**
+
+6. **European approximation** — proceeding European for Phase 1 (it is what
+   `CLAUDE.md`'s "Black-Scholes" implies, and it is correct for OTM ETF
+   strategies). §3 notes this is weaker for single stocks. An
+   American/Bjerksund-Stensland pricer is an additive extension behind the
+   same interface, not a rewrite — flag if you want it before Phase 5.
+7. **Fill model** — vega-based vol-point half-spread (§8), or your own assumption?
 8. **Capital model** — Reg-T margin with per-strategy rules (§8), or fixed notional?
 9. **Backtest window** — 2015→now spans 2018 Volmageddon and 2020 COVID
    (good regime coverage, but the options market changed structurally).
-
----
 
 ## 12. Sizing note
 
