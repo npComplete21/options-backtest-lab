@@ -1,0 +1,44 @@
+[project]
+name = "options-backtest-lab"
+version = "0.1.0"
+description = "Historical options backtesting via Black-Scholes-derived synthetic chains"
+requires-python = ">=3.11"
+# No PySpark: see docs/IMPLEMENTATION_PLAN.md section 12. A full 10-year chain for one
+# symbol prices in 0.09s on one core, so distributed compute is pure overhead here.
+dependencies = [
+    "numpy",
+    "scipy",
+    "polars",                  # chain generation, dataframe layer
+    "duckdb",                  # analytical queries over results Parquet
+    "joblib",                  # parallelism across parameter-sweep runs
+    "pandas",                  # yfinance interop only
+    "pyarrow",
+    "pydantic>=2",
+    "pyyaml",
+    "pandas_market_calendars",
+    "yfinance",
+    "boto3",
+]
+
+[project.optional-dependencies]
+# QuantLib is an independent reference implementation used only to
+# cross-validate our pricing module. Never imported by the runtime path.
+dev = ["pytest", "pytest-cov", "ruff", "QuantLib"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
