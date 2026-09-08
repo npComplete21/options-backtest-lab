@@ -1,4 +1,3 @@
 # Single source of truth for dependencies is pyproject.toml.
-#   pip install -e '.[dev]'          # pricing, strategy, analysis + tests
-#   pip install -e '.[dev,spark]'    # adds PySpark (requires Python <= 3.11)
+#   pip install -e '.[dev]'    # runtime + tests (incl. QuantLib cross-validation)
 -e .[dev]

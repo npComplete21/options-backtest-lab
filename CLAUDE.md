@@ -21,28 +21,43 @@ read/compute only.
 ## Architecture
 1. **Raw zone (S3)** — daily OHLC per ticker (yfinance/Stooq), plus a
    volatility proxy series (rolling realized vol and/or VXN-style index).
-2. **Processed zone (S3, Parquet)** — synthetic historical option chains:
-   one row per (date, ticker, expiration, strike, type) with Black-Scholes
-   theoretical value, delta/gamma/theta/vega, computed via PySpark.
-3. **Backtest engine (PySpark)** — walks the processed zone day-by-day,
-   applies a strategy + adjustment rule, produces a results table
-   (P&L, Sharpe, max drawdown, win rate) per parameter set.
-4. **Analysis** — Jupyter notebooks in `notebooks/` reading results from
-   Athena/S3 for comparison across strategies and tickers.
+2. **Processed zone (Parquet)** — synthetic historical option chains:
+   one row per (date, symbol, expiration, strike, right) with Black-Scholes
+   theoretical value and full greeks, generated with NumPy + Polars.
+3. **Backtest engine** — walks the processed zone day-by-day, applies a
+   strategy + adjustment rule, produces a results table (P&L, Sharpe, max
+   drawdown, win rate) per parameter set. Sequential by nature: tomorrow's
+   position depends on today's.
+4. **Analysis** — DuckDB over the results Parquet, plus Jupyter notebooks in
+   `notebooks/`, for comparison across strategies and instruments.
 
 ## Tech stack
-- Python 3.11, PySpark
-- AWS: S3 (raw + processed zones), EMR Serverless for Spark jobs, Athena for
-  querying results, IAM roles scoped to this project only
-- Local dev: run Spark in local mode against a small date range before
-  submitting full EMR jobs
+- Python 3.11+
+- **NumPy** — pricing core (pure, vectorized, no I/O)
+- **Polars** — chain generation and dataframe work
+- **DuckDB** — analytical queries over results Parquet, locally or on S3
+- **joblib** — parallelism across parameter-sweep runs
+- Storage: Parquet on local disk; S3 optional for archival/sharing
+- **No Spark.** A full 10-year chain for one symbol is ~806k contracts and
+  prices in 0.09s on a single core (~78 MB). Spark's job startup alone is
+  10-30s, and the backtest engine is a sequential state machine — the worst
+  fit for its execution model. The real parallelism is across independent
+  sweep runs, which is a job-queue problem, not a data-parallelism one.
+  Revisit only if this ever moves to tick-level data.
 
 ## Conventions
-- S3 bucket layout: `s3://<bucket>/raw/<ticker>/...`,
-  `s3://<bucket>/processed/chains/<ticker>/...`,
-  `s3://<bucket>/results/<strategy>/<run_id>/...`
+- Zone layout (same tree locally under `data/` or under an `s3://<bucket>/`
+  prefix): `raw/<symbol>/...`, `processed/chains/<symbol>/...`,
+  `results/<strategy>/<run_id>/...`
 - All option pricing goes through a single shared module
   (`src/pricing/black_scholes.py`) — do not reimplement BS math elsewhere.
+  It stays pure NumPy: no I/O, no config, no dataframe library.
+- **The engine contains no ticker symbols and no strategy names.** Strategy
+  and instrument layers meet only at a daily chain-snapshot interface;
+  strategies are declarative specs, not engine branches.
+- Pricing changes must pass the QuantLib cross-validation suite
+  (`tests/test_quantlib_reference.py`) as well as the internal checks —
+  internal consistency alone cannot catch a shared-formula error.
 - Every backtest run is parameterized and logged with a `run_id`; no
   in-place mutation of prior results.
 - Validate any new pricing output against known real option prices/put-call

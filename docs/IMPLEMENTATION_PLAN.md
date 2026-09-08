@@ -1,7 +1,7 @@
 # options-backtest-lab — Implementation Plan
 
 Status: **draft for approval — no code written yet**
-Revised: 2026-09-08 (v2 — generalized across strategy × instrument)
+Revised: 2026-09-08 (v3 — Spark dropped for Polars/DuckDB; QuantLib validation added)
 
 ---
 
@@ -126,7 +126,7 @@ Each strategy's `params` block generates a **Pydantic model** at load time.
 This gives, from one declaration: validation with bounds, defaults,
 `--set k=v` CLI coercion, JSON serialization into `params.json`, and the
 canonical hash for `run_id`. Invalid parameter combinations fail before any
-compute starts, not 40 minutes into a Spark job.
+compute starts, not 40 minutes into a chain-generation run.
 
 Discoverability:
 ```bash
@@ -234,7 +234,7 @@ src/
     registry.py
     library/            # iron_condor.yaml, short_strangle.yaml, calendar.yaml...
   backtest/
-    chains.py           # raw -> processed synthetic chains
+    chains.py           # raw -> processed synthetic chains (NumPy + Polars)
     engine.py           # instrument- and strategy-agnostic day walker
     positions.py        # leg/position state, assignment, expiry
     fills.py            # bid/ask + slippage
@@ -243,8 +243,10 @@ src/
     run.py              # run_id, manifest, CLI
 ```
 
-**Hard rule from `CLAUDE.md`:** `black_scholes.py` is pure numpy — no Spark,
-no I/O, no config. Everything imports it; it imports nothing of ours.
+**Hard rule from `CLAUDE.md`:** `black_scholes.py` is pure numpy — no I/O, no
+config, no dataframe library. Everything imports it; it imports nothing of
+ours. That is what let it be benchmarked and cross-validated against QuantLib
+in isolation (§9, §12).
 
 **The engine contains zero strategy names and zero ticker symbols.** If a
 grep for `QQQ` or `strangle` hits `backtest/engine.py`, the design has failed.
@@ -277,7 +279,7 @@ One row per `(quote_date, symbol, expiration, strike, right)`:
 
 **Partitioning:** `processed/chains/symbol=<S>/year=<YYYY>/month=<MM>/`, with
 `quote_date` as a column. Daily partitions would mean ~2,500 tiny partitions
-per symbol over 10 years — bad for Spark and Athena both.
+per symbol over 10 years — bad for both the writer and DuckDB's scan planner.
 
 `surface_id` and `vol_model_id` are load-bearing: the zone holds multiple
 priced chains for the same date/strike under different assumptions, and these
@@ -339,6 +341,13 @@ strategies (iron condor) margin at wing width — so this must be a
 
 Cheapest → strongest:
 
+0. **QuantLib cross-validation** *(implemented)* — price and all five greeks
+   against an independent reference implementation. Every other check below
+   compares our code against *itself* and shares its formulae, so a subtly
+   wrong `d1` could satisfy all of them at once. **Result: agreement to
+   1e-13 or better across 720 cases**, including negative rates, confirming
+   both the math and the greek conventions (vega per 1.00 vol, theta per
+   year, rho per 1.00 rate).
 1. **Put-call parity** — `C − P = S·e^{−qτ} − K·e^{−rτ}`, to ~1e-10
 2. **Greeks vs. finite differences** across a moneyness/τ grid
 3. **Known reference values** — Hull worked examples
@@ -347,7 +356,9 @@ Cheapest → strongest:
 6. **Against real market quotes** — back out IV from a real chain's mid, feed
    it to our pricer, confirm we reproduce the price. Alpha Vantage is
    premium-gated, so use **yfinance `Ticker.option_chain()`** (free, live
-   bid/ask/IV) for this.
+   bid/ask/IV) for this. Note that `implied_vol` returns `NaN` for deep
+   ITM/OTM contracts where vol is not identifiable — those must be filtered,
+   not treated as failures.
 7. **Strategy-level golden tests** — a hand-computed iron condor P&L over a
    short window, asserted exactly. This is what catches engine bugs that
    pricing tests cannot.
@@ -358,14 +369,14 @@ Cheapest → strongest:
 
 | Phase | Deliverable | Gate |
 |---|---|---|
-| 0 | env, deps, pytest/ruff, calendar | `pytest` clean |
-| 1 | `black_scholes.py` + validation 1–4 | parity 1e-10, greeks match FD |
+| 0 | env, deps, pytest/ruff | **done** — `pytest` clean |
+| 1 | `black_scholes.py` + validation 0–4 | **done** — 748 tests, parity 1e-10, QuantLib to 1e-13 |
 | 2 | `Instrument` + registry + ingestion → local `data/` | ETF + single-stock symbol both resolve |
 | 3 | selectors + strategy spec loader + registry | `strangle`/`iron_condor` YAML load & validate; selector unit tests |
-| 4 | `surface.py` + `chains.py` (Spark local, short window) | validation 5–6 pass |
+| 4 | `surface.py` + `chains.py` (Polars, short window) | validation 5–6 pass |
 | 5 | engine + positions + fills + capital + metrics | validation 7: hand-checked IC run |
 | 6 | second strategy + second instrument, **zero engine changes** | **the real test of the abstraction** |
-| 7 | sweeps, S3, EMR Serverless, Athena, notebooks | sensitivity surface |
+| 7 | sweeps (joblib), DuckDB result queries, notebooks | sensitivity surface |
 
 **Phase 6 is the acceptance test for this whole redesign.** If adding
 strategy #2 on instrument #2 requires editing the engine, the abstraction
@@ -401,16 +412,42 @@ engine before Phase 6 tests for them.
 9. **Backtest window** — 2015→now spans 2018 Volmageddon and 2020 COVID
    (good regime coverage, but the options market changed structurally).
 
-## 12. Sizing note
+## 12. Why not Spark — measured
 
-One chain ≈ `2,500 days × ~40 strikes × 2 rights × ~4 expiries ≈ 800k
-rows/symbol` — small; pandas would cope. PySpark earns its place at Phase 7,
-where sweeps multiply that by every (surface × fill × strategy-param ×
-instrument) combination. Keeping `black_scholes.py` pure numpy means the same
-code serves both, so this costs nothing either way.
+The v1/v2 plans inherited PySpark, EMR Serverless and Athena from
+`CLAUDE.md`. Benchmarked on this machine against the real pricing module:
+
+| Operation | Measured |
+|---|---|
+| Full 10-year chain, 1 symbol (806,400 contracts, all 5 greeks) | **0.09 s** |
+| Throughput | 8.8M contracts/sec, single core |
+| Peak memory | 78 MB |
+| 10 symbols | ~0.9 s, ~0.8 GB |
+| Polars write 806k rows → Parquet | 0.08 s |
+| DuckDB group-by over that Parquet | 0.01 s |
+| *Spark job startup, before any work* | *10–30 s* |
+
+Spark's startup overhead alone is 100–300× the actual compute. The rough
+industry threshold is that single-node tools win below ~10 GB and Spark pays
+off from ~100 GB upward — this workload is three orders of magnitude below
+that. Worse, the backtest engine is a **sequential state machine** (tomorrow's
+position depends on today's), which is the poorest possible fit for Spark's
+execution model. The parallelism that genuinely exists is *across independent
+sweep runs* — a job-queue problem, handled by `joblib`.
+
+**Resulting stack:** NumPy (pricing) · Polars (chains/dataframes) · DuckDB
+(result queries, replacing Athena) · joblib (sweep parallelism) · Parquet
+(storage, S3 optional). This also removes the Python 3.11 constraint, EMR
+cost, and the Athena layer entirely.
+
+**Revisit if** the project moves to tick-level or intraday options data —
+billions of rows is genuinely distributed territory.
 
 ## 13. New dependencies
 
-`pydantic` (param schemas) · `pandas_market_calendars` (trading days,
-expiries) · `pytest`, `pytest-cov` · `scipy` (norm CDF/PDF, IV root-finding)
-· `pyarrow` (Parquet outside Spark) · `pyyaml` (strategy specs)
+**Runtime:** `numpy` · `scipy` (norm CDF/PDF, IV root-finding) · `polars` ·
+`duckdb` · `pyarrow` · `pydantic` (param schemas) · `pyyaml` (strategy specs)
+· `pandas_market_calendars` (trading days, expiries) · `yfinance` · `boto3`
+
+**Dev only:** `pytest`, `pytest-cov`, `ruff`, `QuantLib` (independent pricing
+oracle — never imported by the runtime path)
