@@ -1,5 +1,4 @@
-pyspark==3.5.*
-yfinance
-pandas
-numpy
-boto3
+# Single source of truth for dependencies is pyproject.toml.
+#   pip install -e '.[dev]'          # pricing, strategy, analysis + tests
+#   pip install -e '.[dev,spark]'    # adds PySpark (requires Python <= 3.11)
+-e .[dev]

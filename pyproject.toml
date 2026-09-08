@@ -1,0 +1,41 @@
+[project]
+name = "options-backtest-lab"
+version = "0.1.0"
+description = "Historical options backtesting via Black-Scholes-derived synthetic chains"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "pyarrow",
+    "pydantic>=2",
+    "pyyaml",
+    "pandas_market_calendars",
+    "yfinance",
+    "boto3",
+]
+
+[project.optional-dependencies]
+# PySpark 3.5 does not support Python 3.13 (officially <=3.11).
+# Kept out of the default install so the pricing/strategy layers stay usable
+# on any interpreter. See docs/IMPLEMENTATION_PLAN.md - Phase 4.
+spark = ["pyspark==3.5.*"]
+dev = ["pytest", "pytest-cov", "ruff"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
