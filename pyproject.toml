@@ -34,7 +34,10 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --strict-markers"
+addopts = "-q --strict-markers -m 'not network'"
+markers = [
+    "network: hits a live data source; deselected by default, run with -m network",
+]
 
 [tool.ruff]
 line-length = 100

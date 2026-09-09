@@ -1,7 +1,10 @@
 __pycache__/
 *.pyc
 .venv/
-data/*.parquet
+data/raw/
+data/processed/
+data/results/
+data/**/*.parquet
 .env
 .DS_Store
 .coverage
