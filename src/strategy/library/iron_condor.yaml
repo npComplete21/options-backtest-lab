@@ -1,0 +1,47 @@
+name: iron_condor
+description: >
+  Short strangle with long wings, capping the loss on each side. Defined risk;
+  the wings are defined *relative to* the short strikes, which is why leg
+  resolution is ordered rather than independent.
+
+params:
+  dte_target:       {type: int,   default: 45,   min: 1,    max: 365}
+  dte_tolerance:    {type: int,   default: 7,    min: 0,    max: 30}
+  short_put_delta:  {type: float, default: 0.16, min: 0.01, max: 0.50}
+  short_call_delta: {type: float, default: 0.16, min: 0.01, max: 0.50}
+  wing_width:       {type: float, default: 5.0,  min: 0.5}
+  contracts:        {type: int,   default: 1,    min: 1}
+
+legs:
+  - id: short_put
+    right: P
+    qty: -1
+    expiry: {dte: {target: "{{dte_target}}", tolerance: "{{dte_tolerance}}"}}
+    strike: {delta: "{{short_put_delta}}"}
+
+  - id: long_put
+    right: P
+    qty: 1
+    expiry: {same_as: short_put}
+    strike: {offset: {base: short_put, points: "-{{wing_width}}"}}
+
+  - id: short_call
+    right: C
+    qty: -1
+    expiry: {same_as: short_put}
+    strike: {delta: "{{short_call_delta}}"}
+
+  - id: long_call
+    right: C
+    qty: 1
+    expiry: {same_as: short_put}
+    strike: {offset: {base: short_call, points: "{{wing_width}}"}}
+
+entry:
+  - {calendar: {every: week, on: friday}}
+  - {no_open_position: true}
+
+management:
+  - {profit_target: {pct_of_credit: 0.50}, action: close}
+  - {stop_loss: {multiple_of_credit: 2.0}, action: close}
+  - {dte_exit: {at: 21}, action: close}

@@ -1,0 +1,33 @@
+name: short_strangle
+description: >
+  Sell an out-of-the-money put and call on the same expiry. Undefined risk;
+  profits when realized volatility comes in below the implied vol sold.
+
+params:
+  dte_target:       {type: int,   default: 45,   min: 1,    max: 365}
+  dte_tolerance:    {type: int,   default: 7,    min: 0,    max: 30}
+  short_put_delta:  {type: float, default: 0.16, min: 0.01, max: 0.50}
+  short_call_delta: {type: float, default: 0.16, min: 0.01, max: 0.50}
+  contracts:        {type: int,   default: 1,    min: 1}
+
+legs:
+  - id: short_put
+    right: P
+    qty: -1
+    expiry: {dte: {target: "{{dte_target}}", tolerance: "{{dte_tolerance}}"}}
+    strike: {delta: "{{short_put_delta}}"}
+
+  - id: short_call
+    right: C
+    qty: -1
+    expiry: {same_as: short_put}
+    strike: {delta: "{{short_call_delta}}"}
+
+entry:
+  - {calendar: {every: week, on: friday}}
+  - {no_open_position: true}
+
+management:
+  - {profit_target: {pct_of_credit: 0.50}, action: close}
+  - {stop_loss: {multiple_of_credit: 2.0}, action: close}
+  - {dte_exit: {at: 21}, action: close}
