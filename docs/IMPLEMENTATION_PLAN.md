@@ -1,7 +1,7 @@
 # options-backtest-lab — Implementation Plan
 
 Status: **draft for approval — no code written yet**
-Revised: 2026-09-08 (v3 — Spark dropped for Polars/DuckDB; QuantLib validation added)
+Revised: 2026-09-08 (v4 — Phase 2 complete; expiration availability modelled)
 
 ---
 
@@ -148,6 +148,17 @@ class Instrument:
     def calendar() -> Calendar             # trading days, expiries, earnings
     def contract_spec() -> ContractSpec
 ```
+
+**Expiration availability is time-varying, and this is load-bearing.** A live
+probe on 2026-09-08 showed QQQ listing expirations on all five weekdays
+(Fri:18, Wed:5, Thu:4, Mon:2, Tue:1); in 2015 it had only monthlies and Friday
+weeklies, with daily expirations arriving around 2022. A generator emitting
+the modern grid across a 2015 window backtests contracts that never existed —
+the same silent-but-plausible failure mode as pricing off realized vol. Each
+instrument therefore carries per-series `available_from` dates, and the
+generator filters by the quote date's listing regime. Listing dates are hard
+to source, so rules default to `verified: false` and surface as estimates in
+run metadata rather than passing as fact.
 
 `ContractSpec` is easy to overlook and matters: **strike increment**
 ($1 for AAPL, $5 for SPX), **multiplier**, **exercise style** (American for
@@ -371,7 +382,7 @@ Cheapest → strongest:
 |---|---|---|
 | 0 | env, deps, pytest/ruff | **done** — `pytest` clean |
 | 1 | `black_scholes.py` + validation 0–4 | **done** — 748 tests, parity 1e-10, QuantLib to 1e-13 |
-| 2 | `Instrument` + registry + ingestion → local `data/` | ETF + single-stock symbol both resolve |
+| 2 | `Instrument` + registry + ingestion → local `data/` | **done** — QQQ + AAPL resolve and ingest; 791 tests |
 | 3 | selectors + strategy spec loader + registry | `strangle`/`iron_condor` YAML load & validate; selector unit tests |
 | 4 | `surface.py` + `chains.py` (Polars, short window) | validation 5–6 pass |
 | 5 | engine + positions + fills + capital + metrics | validation 7: hand-checked IC run |
