@@ -1,7 +1,7 @@
 # options-backtest-lab — Implementation Plan
 
 Status: **draft for approval — no code written yet**
-Revised: 2026-09-09 (v5 — Phase 3 complete; tau clock seam; 0DTE scope limit recorded)
+Revised: 2026-09-09 (v6 — tau clock is now the shared module, instant-resolution)
 
 ---
 
@@ -249,12 +249,35 @@ pick clocks independently, no live-vs-backtest comparison means anything and
 the discrepancy looks like a market finding rather than a units error.
 
 `src/timebase.py` therefore holds the convention, imports nothing from the
-rest of the project, and is the **extraction point for a shared package**
-once live-validator needs it. Clocks carry a stable `id` (`calendar-365/v1`)
-that belongs in `params.json` and the `run_id` hash. `IntradayClock` raises
-rather than approximating — the session weighting curve must be *measured*
-from recorded data, since intraday vol is U-shaped and even a trading-hours
-clock misstates tau through the session.
+rest of the project, and — **as of 2026-09-09 — is the shared module itself,
+not merely the extraction point for one.** `options-live-validator` imports it
+from a pinned tag of this package rather than keeping its own copy; that repo's
+plan section 3 makes an identical clock a hard requirement, and it had briefly
+forked. Clocks carry a stable `id` (`calendar-365/v1`) that belongs in
+`params.json` and the `run_id` hash.
+
+Two consequences of becoming shared:
+
+- **The protocol answers over timezone-aware instants, not dates.** Date
+  resolution was survivable while this repo priced only multi-week tenors and
+  fatal the moment 0DTE entered the program: on expiry day a date-resolution
+  clock can only answer zero, pricing every 0DTE contract at intrinsic.
+  Date-granular callers normalise with `at_midnight()` and get exactly the old
+  `days/365` back, so no backtest result is restated.
+- **Sessions are injected** (`SessionSource`), so the module stays pure-stdlib
+  and can be depended on without dragging `pandas_market_calendars`, numpy or
+  polars behind it. Each repo supplies its own calendar.
+
+`TradingHoursClock` is the intraday-capable clock live-validator needs, and
+`TradingDayClock` now raises `ShortDatedTauError` on a same-session expiry
+rather than silently answering zero. What is still missing is the *weighting*:
+intraday vol is U-shaped, so flat session time still misstates tau through the
+session, and `VolWeightedClock` raises rather than approximating — that curve
+must be **measured** from live-validator's recorded data.
+
+`tests/test_timebase.py::test_the_headline_ratio_holds` pins the 5.3x/2.31x
+figures above. Both repos size strikes with them, so if that test ever changes
+value, every recorded residual in the program changes with it.
 
 ### Two further modelling constraints, folded into the design
 

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from src.timebase import DEFAULT_CLOCK, TauClock
+from src.timebase import DEFAULT_CLOCK, TauClock, at_midnight
 
 CONTRACT_COLUMNS = ("expiration", "strike", "right", "theo", "delta", "gamma", "vega", "sigma")
 
@@ -58,8 +58,14 @@ class ChainSnapshot:
         Read through the clock rather than computed inline: the convention is
         a recorded input, and hardcoding calendar days here would move strike
         selection without leaving a trace in run metadata.
+
+        A snapshot is one *day*, so both endpoints are normalised to the same
+        wall time and the timezone cancels - this returns exactly the
+        ``days/365`` a date-resolution clock did. Intraday work does not go
+        through here: it holds real instants already and calls the clock
+        directly, which is the whole reason the clock protocol takes instants.
         """
-        return self.clock.tau(self.as_of, expiry)
+        return self.clock.year_fraction(at_midnight(self.as_of), at_midnight(expiry))
 
     def slice(self, expiry: dt.date, right: str) -> pl.DataFrame:
         out = self.contracts.filter(
