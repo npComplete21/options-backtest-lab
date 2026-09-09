@@ -1,0 +1,104 @@
+# Instrument registry. Adding a symbol is a config change, not code.
+#
+# expirations[].available_from - when that series became listable for THIS
+# symbol. The chain generator filters through it so a backtest cannot trade
+# contracts that did not exist. verified=false means the date is an estimate:
+# usable, but it self-declares and is surfaced in run metadata. Verify against
+# CBOE/OCC listing announcements before trusting a window that straddles one.
+
+instruments:
+
+  QQQ:
+    asset_class: etf
+    contract_spec:
+      strike_increment: 1.0     # near-ATM; wings list coarser (5.0 observed 2026-09)
+      multiplier: 100
+      exercise: american
+      settlement: physical
+    vol_model:
+      kind: vol_index
+      vol_index: "^VXN"
+      term_structure_source: ["^VIX9D", "^VIX", "^VIX3M"]   # SPX shape, borrowed
+      confidence: observed_iv
+    expirations:
+      - {type: monthly,    available_from: 1999-03-10, verified: true,
+         note: "third Friday; listed since fund inception"}
+      - {type: weekly_fri, available_from: 2010-06-04, verified: false,
+         note: "CBOE weekly expansion to major ETFs, approx"}
+      - {type: weekly_wed, available_from: 2016-02-23, verified: false}
+      - {type: weekly_mon, available_from: 2016-08-15, verified: false}
+      - {type: weekly_tue, available_from: 2022-09-19, verified: false,
+         note: "0DTE-era completion of the daily grid, approx"}
+      - {type: weekly_thu, available_from: 2022-09-19, verified: false}
+    notes: >
+      High-confidence vol model: ^VXN is a real observed 30-day implied vol
+      for the Nasdaq-100, so the IV premium is inherited from history rather
+      than assumed.
+
+  AAPL:
+    asset_class: single_stock
+    earnings_sensitive: true
+    contract_spec:
+      strike_increment: 2.5
+      multiplier: 100
+      exercise: american
+      settlement: physical
+    vol_model:
+      kind: single_stock
+      confidence: directional_only
+    expirations:
+      - {type: monthly,    available_from: 1990-01-19, verified: true}
+      - {type: weekly_fri, available_from: 2010-11-12, verified: false,
+         note: "approx; among the first single names to get weeklies"}
+    notes: >
+      No free vol index exists for AAPL, so its IV premium is ASSUMED rather
+      than observed - runs are tagged directional_only and must never be
+      compared like-for-like against ETF runs. Splits 7:1 2014-06-09 and 4:1
+      2020-08-31 fall inside a typical window; split-adjusted prices keep the
+      synthetic strike grid continuous. A live chain on 2026-09-08 showed a
+      few Mon/Wed/Thu expirations, which are not modelled here: they are most
+      likely quarterlies or end-of-month series rather than true weeklies.
+      Verify before enabling.
+
+  SPY:
+    asset_class: etf
+    contract_spec:
+      strike_increment: 1.0
+      multiplier: 100
+      exercise: american
+      settlement: physical
+    vol_model:
+      kind: vol_index
+      vol_index: "^VIX"
+      term_structure_source: ["^VIX9D", "^VIX", "^VIX3M"]
+      confidence: observed_iv
+    expirations:
+      - {type: monthly,    available_from: 1993-02-01, verified: true}
+      - {type: weekly_fri, available_from: 2005-10-28, verified: false,
+         note: "SPY was among the first weeklies, approx"}
+      - {type: weekly_wed, available_from: 2016-02-23, verified: false}
+      - {type: weekly_mon, available_from: 2016-08-15, verified: false}
+      - {type: weekly_tue, available_from: 2022-09-19, verified: false}
+      - {type: weekly_thu, available_from: 2022-09-19, verified: false}
+
+  IWM:
+    asset_class: etf
+    contract_spec:
+      strike_increment: 1.0
+      multiplier: 100
+      exercise: american
+      settlement: physical
+    vol_model:
+      kind: single_stock          # NOT vol_index - see notes
+      confidence: directional_only
+    expirations:
+      - {type: monthly,    available_from: 2000-05-26, verified: true}
+      - {type: weekly_fri, available_from: 2010-06-04, verified: false}
+    notes: >
+      ^RVX (the Russell 2000 vol index) returns EMPTY from yfinance as of
+      2026-09-08 - it appears delisted from that source. The implementation
+      plan originally listed IWM as a high-confidence vol_index instrument;
+      that is not achievable with the current data source, so it falls back to
+      an assumed premium and is tagged directional_only. To restore
+      observed-IV confidence, source RVX from CBOE directly and switch
+      vol_model.kind back to vol_index.

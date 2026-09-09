@@ -1,7 +1,7 @@
 # options-backtest-lab — Implementation Plan
 
 Status: **draft for approval — no code written yet**
-Revised: 2026-09-08 (v3 — Spark dropped for Polars/DuckDB; QuantLib validation added)
+Revised: 2026-09-09 (v6 — tau clock is now the shared module, instant-resolution)
 
 ---
 
@@ -149,6 +149,17 @@ class Instrument:
     def contract_spec() -> ContractSpec
 ```
 
+**Expiration availability is time-varying, and this is load-bearing.** A live
+probe on 2026-09-08 showed QQQ listing expirations on all five weekdays
+(Fri:18, Wed:5, Thu:4, Mon:2, Tue:1); in 2015 it had only monthlies and Friday
+weeklies, with daily expirations arriving around 2022. A generator emitting
+the modern grid across a 2015 window backtests contracts that never existed —
+the same silent-but-plausible failure mode as pricing off realized vol. Each
+instrument therefore carries per-series `available_from` dates, and the
+generator filters by the quote date's listing regime. Listing dates are hard
+to source, so rules default to `verified: false` and surface as estimates in
+run metadata rather than passing as fact.
+
 `ContractSpec` is easy to overlook and matters: **strike increment**
 ($1 for AAPL, $5 for SPX), **multiplier**, **exercise style** (American for
 equity/ETF options, European for SPX/NDX), **settlement** (physical vs cash).
@@ -212,6 +223,72 @@ assumed-premium problem for single stocks entirely, and let us *calibrate*
 the skew that §5 currently has to sweep. Worth pricing before Phase 4.
 
 ---
+
+## 3b. Scope limit: this repo cannot backtest 0DTE
+
+The program targets **QQQ 0DTE** (decided 2026-09-08). This repo cannot
+serve that goal, and sweeping parameters does not fix it: `sigma_ATM` comes
+from `^VXN` (30-day) with term shape borrowed from the SPX complex, whose
+shortest anchor is `^VIX9D` — **nine days**. Reaching `tau ~ 0` from there is
+invention, not interpolation, and 0DTE is precisely where term structure is
+most non-linear and where implied must collapse into realised intraday.
+
+So for 0DTE the repo relationship **inverts**: `options-live-validator`'s
+recorder is the primary data source, and a 0DTE backtest becomes possible
+only later, by replay. Unrecorded sessions are permanently absent from that
+dataset. This repo remains the right home for longer-dated work — 45-DTE
+iron condors, weekly strangles — where the vol anchors actually reach.
+
+### The tau clock is a recorded input
+
+At 09:45 on expiry day: calendar `tau` = 0.000713, trading-hours `tau` =
+0.003815 — **5.3x in tau, 2.3x in `sigma*sqrt(tau)`**. Since `delta(0.16)`
+and `stddev(1.0)` both scale with `sigma*sqrt(tau)`, the clock choice moves
+*which strikes get sold* by better than a factor of two. If the two repos
+pick clocks independently, no live-vs-backtest comparison means anything and
+the discrepancy looks like a market finding rather than a units error.
+
+`src/timebase.py` therefore holds the convention, imports nothing from the
+rest of the project, and — **as of 2026-09-09 — is the shared module itself,
+not merely the extraction point for one.** `options-live-validator` imports it
+from a pinned tag of this package rather than keeping its own copy; that repo's
+plan section 3 makes an identical clock a hard requirement, and it had briefly
+forked. Clocks carry a stable `id` (`calendar-365/v1`) that belongs in
+`params.json` and the `run_id` hash.
+
+Two consequences of becoming shared:
+
+- **The protocol answers over timezone-aware instants, not dates.** Date
+  resolution was survivable while this repo priced only multi-week tenors and
+  fatal the moment 0DTE entered the program: on expiry day a date-resolution
+  clock can only answer zero, pricing every 0DTE contract at intrinsic.
+  Date-granular callers normalise with `at_midnight()` and get exactly the old
+  `days/365` back, so no backtest result is restated.
+- **Sessions are injected** (`SessionSource`), so the module stays pure-stdlib
+  and can be depended on without dragging `pandas_market_calendars`, numpy or
+  polars behind it. Each repo supplies its own calendar.
+
+`TradingHoursClock` is the intraday-capable clock live-validator needs, and
+`TradingDayClock` now raises `ShortDatedTauError` on a same-session expiry
+rather than silently answering zero. What is still missing is the *weighting*:
+intraday vol is U-shaped, so flat session time still misstates tau through the
+session, and `VolWeightedClock` raises rather than approximating — that curve
+must be **measured** from live-validator's recorded data.
+
+`tests/test_timebase.py::test_the_headline_ratio_holds` pins the 5.3x/2.31x
+figures above. Both repos size strikes with them, so if that test ever changes
+value, every recorded residual in the program changes with it.
+
+### Two further modelling constraints, folded into the design
+
+- **Skew is an input, not a residual.** Flat-vol deltas are wrong by 3-5
+  points on the wings — wider than the gap between adjacent strikes — so
+  `DeltaStrike` reads deltas from the chain snapshot and never derives its
+  own. Asserted by a test that feeds deliberately uniform deltas.
+- **Vega is not additive across expirations.** Front months move more than
+  backs, so summing raw vegas can show a flat book that is materially long or
+  short vol. Resolved legs carry expiry identity so aggregation can weight by
+  term structure at Phase 5. Cheap now, expensive to retrofit.
 
 ## 4. Module layout
 
@@ -371,8 +448,8 @@ Cheapest → strongest:
 |---|---|---|
 | 0 | env, deps, pytest/ruff | **done** — `pytest` clean |
 | 1 | `black_scholes.py` + validation 0–4 | **done** — 748 tests, parity 1e-10, QuantLib to 1e-13 |
-| 2 | `Instrument` + registry + ingestion → local `data/` | ETF + single-stock symbol both resolve |
-| 3 | selectors + strategy spec loader + registry | `strangle`/`iron_condor` YAML load & validate; selector unit tests |
+| 2 | `Instrument` + registry + ingestion → local `data/` | **done** — QQQ + AAPL resolve and ingest; 791 tests |
+| 3 | selectors + strategy spec loader + registry | **done** — both YAML strategies resolve through one path; 844 tests |
 | 4 | `surface.py` + `chains.py` (Polars, short window) | validation 5–6 pass |
 | 5 | engine + positions + fills + capital + metrics | validation 7: hand-checked IC run |
 | 6 | second strategy + second instrument, **zero engine changes** | **the real test of the abstraction** |

@@ -63,6 +63,15 @@ read/compute only.
 - Validate any new pricing output against known real option prices/put-call
   parity before trusting it in a backtest (see Ch. 3-5 sanity checks).
 
+## Shared with options-live-validator
+- `src/timebase.py` is **shared code**, imported by `options-live-validator`
+  from a pinned tag of this package. Changing a clock's numbers changes strike
+  selection in both repos and invalidates recorded residuals, so treat it as a
+  published interface: keep the `id` values stable, and if a clock's output
+  moves, bump its `id` version rather than editing in place.
+- It must stay dependency-free (stdlib only). Sessions are injected via
+  `SessionSource`; do not import a market-calendar library into it.
+
 ## Out of scope for this repo
 - Live/streaming data, broker connections, real order placement → that's
   `options-live-validator`.
