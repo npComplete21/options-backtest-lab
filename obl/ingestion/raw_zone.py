@@ -20,7 +20,7 @@ from pathlib import Path
 
 import polars as pl
 
-from src.ingestion.sources import BAR_SCHEMA, DIVIDEND_SCHEMA, BarSource, YFinanceSource
+from obl.ingestion.sources import BAR_SCHEMA, DIVIDEND_SCHEMA, BarSource, YFinanceSource
 
 DEFAULT_ROOT = Path("data/raw")
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import functools
 from pathlib import Path
 
-from src.strategy.spec import StrategySpec
+from obl.strategy.spec import StrategySpec
 
 LIBRARY = Path(__file__).parent / "library"
 

@@ -8,11 +8,12 @@ import numpy as np
 import polars as pl
 import pytest
 from pydantic import ValidationError
-from src.pricing.black_scholes import price_and_greeks
-from src.strategy import registry
-from src.strategy.selectors import DeltaStrike, OffsetStrike, SameExpiryAs, resolve
-from src.strategy.snapshot import ChainSnapshot
-from src.strategy.spec import StrategySpec, StrategySpecError
+
+from obl.pricing.black_scholes import price_and_greeks
+from obl.strategy import registry
+from obl.strategy.selectors import DeltaStrike, OffsetStrike, SameExpiryAs, resolve
+from obl.strategy.snapshot import ChainSnapshot
+from obl.strategy.spec import StrategySpec, StrategySpecError
 
 AS_OF, SPOT = dt.date(2026, 3, 9), 316.0
 

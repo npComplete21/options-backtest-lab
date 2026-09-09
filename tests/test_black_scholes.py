@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from src.pricing.black_scholes import (
+
+from obl.pricing.black_scholes import (
     d1_d2,
     forward,
     implied_vol,

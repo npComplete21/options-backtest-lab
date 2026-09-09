@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from src.timebase import DEFAULT_CLOCK, TauClock, at_midnight
+from obl.timebase import DEFAULT_CLOCK, TauClock, at_midnight
 
 CONTRACT_COLUMNS = ("expiration", "strike", "right", "theo", "delta", "gamma", "vega", "sigma")
 

@@ -16,8 +16,9 @@ import datetime as dt
 from zoneinfo import ZoneInfo
 
 import pytest
-from src.ingestion import calendar as cal
-from src.timebase import (
+
+from obl.ingestion import calendar as cal
+from obl.timebase import (
     CalendarClock,
     Session,
     ShortDatedTauError,

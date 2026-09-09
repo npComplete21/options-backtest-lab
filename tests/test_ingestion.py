@@ -13,9 +13,10 @@ import datetime as dt
 import numpy as np
 import polars as pl
 import pytest
-from src.ingestion.rates import to_continuous
-from src.ingestion.raw_zone import RawZone
-from src.ingestion.sources import BAR_SCHEMA, DIVIDEND_SCHEMA, DataUnavailableError
+
+from obl.ingestion.rates import to_continuous
+from obl.ingestion.raw_zone import RawZone
+from obl.ingestion.sources import BAR_SCHEMA, DIVIDEND_SCHEMA, DataUnavailableError
 
 
 class FakeSource:

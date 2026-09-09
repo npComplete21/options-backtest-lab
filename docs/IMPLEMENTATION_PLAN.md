@@ -248,7 +248,7 @@ and `stddev(1.0)` both scale with `sigma*sqrt(tau)`, the clock choice moves
 pick clocks independently, no live-vs-backtest comparison means anything and
 the discrepancy looks like a market finding rather than a units error.
 
-`src/timebase.py` therefore holds the convention, imports nothing from the
+`obl/timebase.py` therefore holds the convention, imports nothing from the
 rest of the project, and — **as of 2026-09-09 — is the shared module itself,
 not merely the extraction point for one.** `options-live-validator` imports it
 from a pinned tag of this package rather than keeping its own copy; that repo's
