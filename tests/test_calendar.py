@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import datetime as dt
 
-from src.ingestion import calendar as cal
-from src.instruments import registry
-from src.instruments.base import ExpirationType
+from obl.ingestion import calendar as cal
+from obl.instruments import registry
+from obl.instruments.base import ExpirationType
 
 
 def _valid(start, end):

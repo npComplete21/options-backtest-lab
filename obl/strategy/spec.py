@@ -24,7 +24,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field, create_model
 
-from src.strategy.selectors import (
+from obl.strategy.selectors import (
     ATMStrike,
     DeltaStrike,
     DTEExpiry,

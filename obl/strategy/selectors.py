@@ -25,7 +25,7 @@ from typing import Protocol
 import numpy as np
 import polars as pl
 
-from src.strategy.snapshot import ChainSnapshot, NoContractsError
+from obl.strategy.snapshot import ChainSnapshot, NoContractsError
 
 
 @dataclass(frozen=True)

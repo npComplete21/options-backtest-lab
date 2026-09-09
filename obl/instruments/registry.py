@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from src.instruments.base import Instrument
+from obl.instruments.base import Instrument
 
 _CONFIG = Path(__file__).parent / "config" / "instruments.yaml"
 
@@ -38,7 +38,7 @@ def get(symbol: str) -> Instrument:
     except KeyError:
         raise UnknownInstrumentError(
             f"{symbol!r} is not in the instrument registry. Known: "
-            f"{sorted(registry)}. Add it to src/instruments/config/instruments.yaml "
+            f"{sorted(registry)}. Add it to obl/instruments/config/instruments.yaml "
             "- it needs a strike grid, exercise style, vol model and expiration "
             "availability dates before it can be backtested."
         ) from None

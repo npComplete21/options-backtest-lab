@@ -14,7 +14,7 @@ import functools
 
 import pandas_market_calendars as mcal
 
-from src.instruments.base import ExpirationType, Instrument
+from obl.instruments.base import ExpirationType, Instrument
 
 _CALENDAR = "NYSE"
 

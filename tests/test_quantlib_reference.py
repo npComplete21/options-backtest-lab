@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from src.pricing.black_scholes import implied_vol, price_and_greeks
+
+from obl.pricing.black_scholes import implied_vol, price_and_greeks
 
 ql = pytest.importorskip("QuantLib", reason="QuantLib is a dev-only dependency")
 

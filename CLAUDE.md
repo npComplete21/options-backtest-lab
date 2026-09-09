@@ -50,7 +50,7 @@ read/compute only.
   prefix): `raw/<symbol>/...`, `processed/chains/<symbol>/...`,
   `results/<strategy>/<run_id>/...`
 - All option pricing goes through a single shared module
-  (`src/pricing/black_scholes.py`) — do not reimplement BS math elsewhere.
+  (`obl/pricing/black_scholes.py`) — do not reimplement BS math elsewhere.
   It stays pure NumPy: no I/O, no config, no dataframe library.
 - **The engine contains no ticker symbols and no strategy names.** Strategy
   and instrument layers meet only at a daily chain-snapshot interface;
@@ -64,7 +64,7 @@ read/compute only.
   parity before trusting it in a backtest (see Ch. 3-5 sanity checks).
 
 ## Shared with options-live-validator
-- `src/timebase.py` is **shared code**, imported by `options-live-validator`
+- `obl/timebase.py` is **shared code**, imported by `options-live-validator`
   from a pinned tag of this package. Changing a clock's numbers changes strike
   selection in both repos and invalidates recorded residuals, so treat it as a
   published interface: keep the `id` values stable, and if a clock's output

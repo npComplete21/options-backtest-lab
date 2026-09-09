@@ -5,8 +5,9 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
-from src.instruments import registry
-from src.instruments.base import (
+
+from obl.instruments import registry
+from obl.instruments.base import (
     AssetClass,
     ContractSpec,
     ExpirationRule,

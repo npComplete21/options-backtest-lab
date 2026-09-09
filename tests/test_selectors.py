@@ -7,8 +7,9 @@ import datetime as dt
 import numpy as np
 import polars as pl
 import pytest
-from src.pricing.black_scholes import price_and_greeks
-from src.strategy.selectors import (
+
+from obl.pricing.black_scholes import price_and_greeks
+from obl.strategy.selectors import (
     ATMStrike,
     CircularLegReferenceError,
     DeltaStrike,
@@ -23,7 +24,7 @@ from src.strategy.selectors import (
     resolution_order,
     resolve,
 )
-from src.strategy.snapshot import ChainSnapshot, NoContractsError
+from obl.strategy.snapshot import ChainSnapshot, NoContractsError
 
 AS_OF = dt.date(2026, 3, 9)
 SPOT = 316.0
