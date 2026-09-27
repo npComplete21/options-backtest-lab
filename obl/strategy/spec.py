@@ -23,7 +23,16 @@ from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field, create_model
+from pydantic_core import PydanticUndefined
 
+from obl.strategy.rules import (
+    UNSAFE_OVERRIDE,
+    EntrySpec,
+    ManagementRule,
+    RuleError,
+    build_entry,
+    build_management,
+)
 from obl.strategy.selectors import (
     ATMStrike,
     DeltaStrike,
@@ -126,8 +135,8 @@ class BoundStrategy:
     name: str
     params: dict[str, Any]
     legs: list[LegSpec]
-    entry: list[dict[str, Any]]
-    management: list[dict[str, Any]]
+    entry: EntrySpec
+    management: tuple[ManagementRule, ...]
 
     def param_hash(self, length: int = 8) -> str:
         """Stable hash of name plus canonicalized params, for the ``run_id``.
@@ -156,7 +165,13 @@ class StrategySpec:
 
         self._entry = raw.get("entry") or []
         self._management = raw.get("management") or []
+        self._allow_unsafe = bool(raw.get(UNSAFE_OVERRIDE, False))
         self.params_model = self._build_params_model(raw.get("params") or {})
+
+        # Shape-check entry and management now, with placeholders still in
+        # place, so a malformed rule fails on load rather than on the first
+        # bind. Parameter-dependent values are re-validated in bind().
+        self._validate_rules(self._placeholder_params())
 
     def _build_params_model(self, block: dict[str, Any]) -> type[BaseModel]:
         fields: dict[str, Any] = {}
@@ -179,6 +194,36 @@ class StrategySpec:
             fields[key] = (py_type, Field(default, **constraints))
         return create_model(f"{self.name}_params", **fields)
 
+    def _placeholder_params(self) -> dict[str, Any]:
+        """Stand-in values so rules can be shape-checked before binding.
+
+        A rule whose value is a parameter cannot be range-checked until bind
+        time, but its *structure* can be checked immediately - and structure is
+        where the dangerous mistakes live: an unknown action, a stop pointing at
+        a leg that does not exist.
+        """
+        out: dict[str, Any] = {}
+        for key, field in self.params_model.model_fields.items():
+            out[key] = field.default if field.default is not PydanticUndefined else 1
+        return out
+
+    def _validate_rules(
+        self, params: dict[str, Any]
+    ) -> tuple[EntrySpec, tuple[ManagementRule, ...]]:
+        leg_ids = frozenset(
+            str(leg["id"]) for leg in self._legs if isinstance(leg, dict) and "id" in leg
+        )
+        try:
+            entry = build_entry(_substitute(self._entry, params))
+            management = build_management(
+                _substitute(self._management, params),
+                leg_ids=leg_ids,
+                allow_unsafe=self._allow_unsafe,
+            )
+        except RuleError as exc:
+            raise StrategySpecError(f"{self.name}: {exc}") from None
+        return entry, management
+
     @property
     def param_names(self) -> list[str]:
         return sorted(self.params_model.model_fields)
@@ -187,12 +232,9 @@ class StrategySpec:
         """Validate parameters and construct the concrete leg specs."""
         params = self.params_model(**overrides).model_dump()
         legs = [self._build_leg(raw, params) for raw in self._legs]
+        entry, management = self._validate_rules(params)
         return BoundStrategy(
-            name=self.name,
-            params=params,
-            legs=legs,
-            entry=_substitute(self._entry, params),
-            management=_substitute(self._management, params),
+            name=self.name, params=params, legs=legs, entry=entry, management=management
         )
 
     def _build_leg(self, raw: dict[str, Any], params: dict[str, Any]) -> LegSpec:
