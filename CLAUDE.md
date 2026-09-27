@@ -64,6 +64,13 @@ read/compute only.
   parity before trusting it in a backtest (see Ch. 3-5 sanity checks).
 
 ## Shared with options-live-validator
+- `obl/strategy/rules.py` is **shared code**: the entry/management half of the
+  DSL, including the intraday rules 0DTE needs. Live-validator expresses its
+  tournament in this vocabulary, so a rule's *meaning* is defined here, once.
+  Management actions are a closed set (`SAFE_ACTIONS`) and anything that could
+  increase short quantity in an open position is refused at load — Natenberg's
+  first rule, made structural. Do not widen that set without the explicit
+  `unsafe_allow_adding_to_losing_position` flag.
 - `obl/timebase.py` is **shared code**, imported by `options-live-validator`
   from a pinned tag of this package. Changing a clock's numbers changes strike
   selection in both repos and invalidates recorded residuals, so treat it as a
